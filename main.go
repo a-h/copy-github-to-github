@@ -41,6 +41,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("Copying from %s to %s\n", *srcURLFlag, *tgtURLFlag)
+
 	err := copy(*srcAccessTokenFlag, *srcURLFlag, *tgtAccessTokenFlag, *tgtURLFlag)
 	if err != nil {
 		fmt.Printf("Failed to copy: %v\n", err)
