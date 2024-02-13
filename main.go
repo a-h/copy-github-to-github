@@ -19,9 +19,14 @@ var srcAccessTokenFlag = flag.String("src-token", "", "Personal access token for
 var srcURLFlag = flag.String("src-url", "", "URL of source repository to pull from github.com")
 var tgtAccessTokenFlag = flag.String("tgt-token", "", "Personal access token for pulling from Github Enterprise")
 var tgtURLFlag = flag.String("tgt-url", "", "URL of source repository to pull from Github Enterprise")
+var helpFlag = flag.Bool("help", false, "Show help")
 
 func main() {
 	flag.Parse()
+	if *helpFlag {
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
 	var errors []string
 	if *srcAccessTokenFlag == "" {
 		errors = append(errors, "Missing src-token flag")
