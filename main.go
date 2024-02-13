@@ -160,8 +160,8 @@ func listRepos(ctx context.Context, orgURL, token string) (repos []Repo, err err
 		}
 		for _, rr := range r {
 			repos = append(repos, Repo{
-				Name: *rr.Name,
-				URL:  *rr.URL,
+				Name: rr.GetName(),
+				URL:  rr.GetHTMLURL(),
 			})
 		}
 		pageIndex++
