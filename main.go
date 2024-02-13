@@ -98,7 +98,7 @@ func OrgCmd(ctx context.Context, args []string) {
 			os.Exit(1)
 		}
 		fmt.Printf("Copying %q to %q...\n", repo.URL, tgt)
-		if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtURLFlag, tgt); err != nil {
+		if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtAccessTokenFlag, tgt); err != nil {
 			fmt.Printf("Failed to copy: %v\n", err)
 			os.Exit(1)
 		}
