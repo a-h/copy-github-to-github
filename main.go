@@ -27,7 +27,7 @@ func main() {
 	fs := flag.NewFlagSet("global", flag.ContinueOnError)
 	helpFlag := fs.Bool("help", false, "Show help.")
 	fs.Parse(os.Args)
-	if *helpFlag || len(os.Args) == 0 {
+	if *helpFlag || len(os.Args) < 2 {
 		fmt.Print(usage)
 		os.Exit(0)
 	}
