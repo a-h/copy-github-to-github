@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -265,7 +266,7 @@ func copy(ctx context.Context, srcAccessToken, src, tgtAccessToken, tgt string) 
 		FollowTags: true,
 		Progress:   os.Stdout,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to push to target: %w", err)
 	}
 
