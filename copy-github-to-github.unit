@@ -1,0 +1,11 @@
+[Unit]
+Description=copy-github-to-github
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5s
+ExecStart=$CMD
+
+[Install]
+WantedBy=multi-user.target

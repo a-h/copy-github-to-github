@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"flag"
 
@@ -18,52 +20,29 @@ import (
 	"github.com/google/go-github/v55/github"
 )
 
-const usage = `Copy a Github repo or full organization between accounts.
+//go:embed usage.txt
+var usage string
 
-  copy-github-to-github repo -src-token <TOKEN> -src-url <https://github.com/ORG/REPO> -tgt-token <TOKEN> -tgt-url <https://github.enterprise.com/ORG/REPO>
-  copy-github-to-github org -src-token <TOKEN> -src-url <https://github.com/ORG> -tgt-token <TOKEN> -tgt-url <https://github.enterprise.com/ORG>
-`
+//go:embed copy-github-to-github.unit
+var unit string
 
 func main() {
 	fs := flag.NewFlagSet("global", flag.ContinueOnError)
+	srcAccessTokenFlag := fs.String("src-token", "", "Personal access token for pulling from github.com")
+	srcURLFlag := fs.String("src-url", "", "URL of source organization or repo, e.g. https://github.com/org")
+	tgtAccessTokenFlag := fs.String("tgt-token", "", "Personal access token for pushing to Github Enterprise")
+	tgtURLFlag := fs.String("tgt-url", "", "URL of target org to push to, e.g. https://github.enterprise.com/org")
+	everyFlag := fs.Duration("every", time.Duration(0), "If set, keep running, and sync again after a delay.")
+	printSystemdUnitFlag := fs.Bool("print-systemd-unit", false, "Set to true to output the systemd unit file instead of running the program")
 	helpFlag := fs.Bool("help", false, "Show help.")
-	fs.Parse(os.Args)
-	if *helpFlag || len(os.Args) < 2 {
+	fs.Parse(os.Args[1:])
+	if *helpFlag {
 		fmt.Print(usage)
+		fs.PrintDefaults()
 		os.Exit(0)
 	}
+	fmt.Println("Help flag...", *helpFlag)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT)
-	go func() {
-		<-sig
-		cancel()
-	}()
-
-	subcommand := os.Args[1]
-	switch subcommand {
-	case "repo":
-		RepoCmd(ctx, os.Args[2:])
-	case "org":
-		OrgCmd(ctx, os.Args[2:])
-	default:
-		fmt.Print(usage)
-		os.Exit(1)
-	}
-}
-
-func OrgCmd(ctx context.Context, args []string) {
-	fs := flag.NewFlagSet("org", flag.ContinueOnError)
-	srcAccessTokenFlag := fs.String("src-token", "", "Personal access token for pulling from github.com")
-	srcURLFlag := fs.String("src-url", "", "URL of source organization, e.g. https://github.com/org")
-	tgtAccessTokenFlag := fs.String("tgt-token", "", "Personal access token for pulling from Github Enterprise")
-	tgtURLFlag := fs.String("tgt-url", "", "URL of target org to push to, e.g. https://github.enterprise.com/org")
-	helpFlag := fs.Bool("help", false, "Show help")
-	if err := fs.Parse(args); err != nil || *helpFlag {
-		fs.PrintDefaults()
-		os.Exit(1)
-	}
 	var errors []string
 	if *srcAccessTokenFlag == "" {
 		errors = append(errors, "Missing src-token flag")
@@ -83,25 +62,68 @@ func OrgCmd(ctx context.Context, args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Listing repos for URL: %v\n", *srcURLFlag)
-	repos, err := listRepos(ctx, *srcURLFlag, *srcAccessTokenFlag)
-	if err != nil {
-		fmt.Printf("Failed to list repos: %v\n", err)
-		os.Exit(1)
+	if *printSystemdUnitFlag {
+		cmd := new(strings.Builder)
+		cmd.WriteString("/usr/local/bin/copy-github-to-github")
+		cmd.WriteString(" -src-token ")
+		cmd.WriteString(*srcAccessTokenFlag)
+		cmd.WriteString(" -src-url ")
+		cmd.WriteString(*srcURLFlag)
+		cmd.WriteString(" -tgt-token ")
+		cmd.WriteString(*tgtAccessTokenFlag)
+		cmd.WriteString(" -tgt-url ")
+		cmd.WriteString(*tgtURLFlag)
+		if *everyFlag > time.Duration(0) {
+			cmd.WriteString(" -every ")
+			cmd.WriteString((*everyFlag).String())
+		}
+		unit = strings.Replace(unit, "$CMD", cmd.String(), -1)
+		fmt.Println(unit)
+		return
 	}
 
-	fmt.Printf("Copying %d repos.\n", len(repos))
+	ctx, cancel := context.WithCancel(context.Background())
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT)
+	go func() {
+		<-sig
+		cancel()
+	}()
 
-	for _, repo := range repos {
-		tgt, err := rewriteURL(repo, *tgtURLFlag)
+loop:
+	for {
+		fmt.Printf("Listing repos for URL: %v\n", *srcURLFlag)
+		repos, err := listRepos(ctx, *srcURLFlag, *srcAccessTokenFlag)
 		if err != nil {
-			fmt.Printf("Failed to rewrite URL %q: %v\n", repo.URL, err)
+			fmt.Printf("Failed to list repos: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Copying %q to %q...\n", repo.URL, tgt)
-		if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtAccessTokenFlag, tgt); err != nil {
-			fmt.Printf("Failed to copy: %v\n", err)
-			os.Exit(1)
+
+		fmt.Printf("Copying %d repos.\n", len(repos))
+
+		for _, repo := range repos {
+			tgt, err := rewriteURL(repo, *tgtURLFlag)
+			if err != nil {
+				fmt.Printf("Failed to rewrite URL %q: %v\n", repo.URL, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Copying %q to %q...\n", repo.URL, tgt)
+			if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtAccessTokenFlag, tgt); err != nil {
+				fmt.Printf("Failed to copy: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		if *everyFlag == time.Duration(0) {
+			break loop
+		}
+		fmt.Printf("Process complete. Running again in %v.\n", *everyFlag)
+		select {
+		case <-ctx.Done():
+			fmt.Printf("Context closed.\n")
+			break loop
+		case <-time.After(*everyFlag):
+			fmt.Printf("Wait complete.\n")
 		}
 	}
 }
@@ -126,22 +148,37 @@ type Repo struct {
 	URL  string
 }
 
-func listRepos(ctx context.Context, orgURL, token string) (repos []Repo, err error) {
-	// Create the client.
-	u, err := url.Parse(orgURL)
+func listRepos(ctx context.Context, ghURL, token string) (repos []Repo, err error) {
+	u, err := url.Parse(ghURL)
 	if err != nil {
 		return repos, fmt.Errorf("failed to parse url: %w", err)
 	}
-	host := strings.ToLower(u.Hostname())
+	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(segments) == 1 {
+		return listReposForOrg(ctx, u, token)
+	}
+	if len(segments) > 2 {
+		return repos, fmt.Errorf("unexpected number of path segments in URL, expected /<org> or /<org>/<repo>, got %q", ghURL)
+	}
+	repos = append(repos, Repo{
+		Name: segments[1],
+		URL:  ghURL,
+	})
+	return repos, nil
+}
+
+func listReposForOrg(ctx context.Context, ghURL *url.URL, token string) (repos []Repo, err error) {
+	// Create the client.
+	host := strings.ToLower(ghURL.Hostname())
 	client := github.NewClient(nil).WithAuthToken(token)
 	if host != "github.com" {
-		client, err = client.WithEnterpriseURLs(u.Scheme+"://"+host, u.Scheme+"://"+host)
+		client, err = client.WithEnterpriseURLs(ghURL.Scheme+"://"+host, ghURL.Scheme+"://"+host)
 		if err != nil {
 			return repos, fmt.Errorf("failed to set enterprise domain: %w", err)
 		}
 	}
 	// Get the org name.
-	org := strings.Split(strings.Trim(u.Path, "/"), "/")[0]
+	org := strings.Split(strings.Trim(ghURL.Path, "/"), "/")[0]
 
 	var pageIndex int
 	for {

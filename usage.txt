@@ -1,0 +1,32 @@
+Copy a Github repo or full organization between accounts.
+
+  copy-github-to-github -src-token <TOKEN> -src-url <https://github.com/ORG/REPO> -tgt-token <TOKEN> -tgt-url <https://github.enterprise.com/ORG/REPO>
+  copy-github-to-github -src-token <TOKEN> -src-url <https://github.com/ORG> -tgt-token <TOKEN> -tgt-url <https://github.enterprise.com/ORG> -every 10m
+
+To run as a systemd unit:
+
+  - Copy the binary to /usr/local/bin/copy-github-to-github
+
+    cp which `copy-github-to-github` /usr/local/bin/copy-github-to-github
+
+  - Use the systemd command, and pass the arguments you want. Remember the -every argument, or it will only run once. The program will output a systemd unit to stdout.
+
+    copy-github-to-github \
+      -src-token <TOKEN> \
+      -src-url <https://github.com/ORG> \
+      -tgt-token <TOKEN> \
+      -tgt-url <https://github.enterprise.com/ORG> \
+      -every 10m \
+      -print-systemd-unit \
+      > /etc/systemd/system/copy-github-to-github.unit 
+
+  - Load the unit.
+
+    systemctl daemon-reload
+
+  - Start the systemd unit.
+  
+    systemctl restart copy-github-to-github
+
+All arguments:
+
