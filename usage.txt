@@ -7,7 +7,7 @@ To run as a systemd unit:
 
   - Copy the binary to /usr/local/bin/copy-github-to-github
 
-    cp which `copy-github-to-github` /usr/local/bin/copy-github-to-github
+    cp `which copy-github-to-github` /usr/local/bin/copy-github-to-github
 
   - Use the systemd command, and pass the arguments you want. Remember the -every argument, or it will only run once. The program will output a systemd unit to stdout.
 
