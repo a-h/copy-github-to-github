@@ -41,7 +41,6 @@ func main() {
 		fs.PrintDefaults()
 		os.Exit(0)
 	}
-	fmt.Println("Help flag...", *helpFlag)
 
 	var errors []string
 	if *srcAccessTokenFlag == "" {
