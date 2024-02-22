@@ -23,7 +23,7 @@ import (
 //go:embed usage.txt
 var usage string
 
-//go:embed copy-github-to-github.unit
+//go:embed copy-github-to-github.service
 var unit string
 
 func main() {

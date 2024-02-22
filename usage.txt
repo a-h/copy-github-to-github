@@ -18,7 +18,7 @@ To run as a systemd unit:
       -tgt-url <https://github.enterprise.com/ORG> \
       -every 10m \
       -print-systemd-unit \
-      > /etc/systemd/system/copy-github-to-github.unit 
+      > /etc/systemd/system/copy-github-to-github.service
 
   - Load the unit.
 
