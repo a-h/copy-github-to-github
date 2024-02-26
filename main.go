@@ -32,6 +32,7 @@ func main() {
 	srcURLFlag := fs.String("src-url", "", "URL of source organization or repo, e.g. https://github.com/org")
 	tgtAccessTokenFlag := fs.String("tgt-token", "", "Personal access token for pushing to Github Enterprise")
 	tgtURLFlag := fs.String("tgt-url", "", "URL of target org to push to, e.g. https://github.enterprise.com/org")
+	tgtVisibilityFlag := fs.String("tgt-visibility", "public", "Set the visibility of new repos created, can be public, internal or private")
 	everyFlag := fs.Duration("every", time.Duration(0), "If set, keep running, and sync again after a delay.")
 	printSystemdUnitFlag := fs.Bool("print-systemd-unit", false, "Set to true to output the systemd unit file instead of running the program")
 	helpFlag := fs.Bool("help", false, "Show help.")
@@ -55,6 +56,9 @@ func main() {
 	if *tgtURLFlag == "" {
 		errors = append(errors, "Missing tgt-url flag")
 	}
+	if msg := isOneOf(*tgtVisibilityFlag, "public", "internal", "private"); msg != "" {
+		errors = append(errors, "tgt-visibility: "+msg)
+	}
 	if len(errors) > 0 {
 		fmt.Println("Invalid or missing params:")
 		fmt.Println("\n -" + strings.Join(errors, "\n -"))
@@ -72,6 +76,8 @@ func main() {
 		cmd.WriteString(*tgtAccessTokenFlag)
 		cmd.WriteString(" -tgt-url ")
 		cmd.WriteString(*tgtURLFlag)
+		cmd.WriteString(" -tgt-visbility ")
+		cmd.WriteString(*tgtVisibilityFlag)
 		if *everyFlag > time.Duration(0) {
 			cmd.WriteString(" -every ")
 			cmd.WriteString((*everyFlag).String())
@@ -107,7 +113,7 @@ loop:
 				os.Exit(1)
 			}
 			fmt.Printf("Copying %q to %q...\n", repo.URL, tgt)
-			if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtAccessTokenFlag, tgt); err != nil {
+			if err = copy(ctx, *srcAccessTokenFlag, repo.URL, *tgtAccessTokenFlag, tgt, *tgtVisibilityFlag); err != nil {
 				fmt.Printf("Failed to copy: %v\n", err)
 				os.Exit(1)
 			}
@@ -125,6 +131,23 @@ loop:
 			fmt.Printf("Wait complete.\n")
 		}
 	}
+}
+
+func isOneOf(v string, allowed ...string) (msg string) {
+	for _, vv := range allowed {
+		if v == vv {
+			return ""
+		}
+	}
+	return fmt.Sprintf("value %q was not one of the allowed values: %v", v, strings.Join(quoteAll(allowed), ", "))
+}
+
+func quoteAll(v []string) (vv []string) {
+	vv = make([]string, len(v))
+	for i, v := range v {
+		vv[i] = fmt.Sprintf("%q", v)
+	}
+	return vv
 }
 
 func rewriteURL(r Repo, tgt string) (updated string, err error) {
@@ -206,48 +229,7 @@ func listReposForOrg(ctx context.Context, ghURL *url.URL, token string) (repos [
 	return repos, nil
 }
 
-func RepoCmd(ctx context.Context, args []string) {
-	fs := flag.NewFlagSet("repo", flag.ContinueOnError)
-	srcAccessTokenFlag := fs.String("src-token", "", "Personal access token for pulling from github.com")
-	srcURLFlag := fs.String("src-url", "", "URL of source repository to pull from github.com")
-	tgtAccessTokenFlag := fs.String("tgt-token", "", "Personal access token for pulling from Github Enterprise")
-	tgtURLFlag := fs.String("tgt-url", "", "URL of source repository to pull from Github Enterprise")
-	helpFlag := fs.Bool("help", false, "Show help")
-	if err := fs.Parse(args); err != nil || *helpFlag {
-		fs.PrintDefaults()
-		os.Exit(1)
-	}
-	var errors []string
-	if *srcAccessTokenFlag == "" {
-		errors = append(errors, "Missing src-token flag")
-	}
-	if *srcURLFlag == "" {
-		errors = append(errors, "Missing src-url flag")
-	}
-	if *tgtAccessTokenFlag == "" {
-		errors = append(errors, "Missing tgt-token flag")
-	}
-	if *tgtURLFlag == "" {
-		errors = append(errors, "Missing tgt-url flag")
-	}
-	if len(errors) > 0 {
-		fmt.Println("Invalid or missing params:")
-		fmt.Println("\n -" + strings.Join(errors, "\n -"))
-		os.Exit(1)
-	}
-
-	fmt.Printf("Copying from %s to %s\n", *srcURLFlag, *tgtURLFlag)
-
-	err := copy(ctx, *srcAccessTokenFlag, *srcURLFlag, *tgtAccessTokenFlag, *tgtURLFlag)
-	if err != nil {
-		fmt.Printf("Failed to copy: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Copy complete.")
-}
-
-func copy(ctx context.Context, srcAccessToken, src, tgtAccessToken, tgt string) error {
+func copy(ctx context.Context, srcAccessToken, src, tgtAccessToken, tgt, tgtVisibility string) error {
 	// Clone to local.
 	dir, err := os.MkdirTemp(os.TempDir(), "src_repo_")
 	if err != nil {
@@ -286,6 +268,7 @@ func copy(ctx context.Context, srcAccessToken, src, tgtAccessToken, tgt string) 
 	_, _, err = client.Repositories.Create(ctx, owner, &github.Repository{
 		Name:        &name,
 		Description: ptr(fmt.Sprintf("Mirror of %s", src)),
+		Visibility:  &tgtVisibility,
 	})
 	if err != nil && !strings.Contains(err.Error(), "name already exists on this account") {
 		return fmt.Errorf("failed to create target repo: %w", err)
