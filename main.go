@@ -76,7 +76,7 @@ func main() {
 		cmd.WriteString(*tgtAccessTokenFlag)
 		cmd.WriteString(" -tgt-url ")
 		cmd.WriteString(*tgtURLFlag)
-		cmd.WriteString(" -tgt-visbility ")
+		cmd.WriteString(" -tgt-visibility ")
 		cmd.WriteString(*tgtVisibilityFlag)
 		if *everyFlag > time.Duration(0) {
 			cmd.WriteString(" -every ")
