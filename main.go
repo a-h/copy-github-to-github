@@ -235,6 +235,7 @@ func copy(ctx context.Context, srcAccessToken, src, tgtAccessToken, tgt, tgtVisi
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
+	defer os.RemoveAll(dir)
 	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
 		URL: src,
 		Auth: &http.BasicAuth{
